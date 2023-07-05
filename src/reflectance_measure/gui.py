@@ -86,15 +86,16 @@ class MyMainWindow(QMainWindow):
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea,
                            self._daq_selector_dock)
 
-    def close(self):
+    def closeEvent(self, *args):
         try:
             self._stage.close()
-        except:
-            pass
+        except Exception as e:
+            print(e)
         try:
             self._daq.close()
-        except:
-            pass
+        except Exception as e:
+            print(e)
+        return super().closeEvent(*args)
 
 
 if __name__ == "__main__":

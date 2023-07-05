@@ -47,8 +47,8 @@ class DAQSelector(QGroupBox):
         self._logger.debug("updating device list")
         self._device_selector.clear()
         device_list = self.daq.list_available_devices()
-        self._device_selector.addItems(device_list)
         self._device_selector.addItem("rescan")
+        self._device_selector.addItems(device_list)
 
     def _set_device(self, *args):
         '''open a device'''
@@ -67,8 +67,8 @@ class DAQSelector(QGroupBox):
         self._logger.debug("updating channel list")
         self._channel_selector.clear()
         device_list = self.daq.list_analog_input_channels()
-        self._channel_selector.addItems(device_list)
         self._channel_selector.addItem("rescan")
+        self._channel_selector.addItems(device_list)
 
     def _set_channel(self, *args):
         channel = self._channel_selector.currentText()
@@ -77,7 +77,7 @@ class DAQSelector(QGroupBox):
             self._update_channel_list()
         else:
             self._logger.info(f"setting axis to {channel}")
-            self.daq.set_channel(channel)
+            self.daq.set_channel(channel.rsplit('/', - 1)[-1])
 
 
 class DAQMonitor(QGroupBox):
@@ -99,6 +99,7 @@ class DAQMonitor(QGroupBox):
         self._refresh_timer = QTimer(self)
         self._refresh_timer.setInterval(500)
         self._refresh_timer.timeout.connect(self._update_channel_info)
+        self._refresh_timer.start()
 
     @property
     def daq(self) -> DAQ:
@@ -111,7 +112,7 @@ class DAQMonitor(QGroupBox):
 
     def _update_channel_info(self, *args):
         '''update the information pertaining to the given channel'''
-        self._logger.debug("updating channel info")
+        # self._logger.debug("updating channel info")
 
         channel_present = self.daq.channel is not None
         self.setEnabled(channel_present)

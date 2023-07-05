@@ -96,8 +96,8 @@ class StageMonitor(QGroupBox):
 
         self._error_log = QListWidget(self)
         self._error_log.setMaximumHeight(
-            3*QListWidgetItem().sizeHint().height())
-        self._error_log.setResizeMode(QListWidget.ResizeMode.Adjust)
+            4*self.fontMetrics().height())
+        # self._error_log.setResizeMode(QListWidget.ResizeMode.Adjust)
         self._layout.addRow(self._error_log)
 
         self._axis_busy = QLabel(" - ", self)
