@@ -138,7 +138,8 @@ class StageMonitor(QGroupBox):
                 self._error_log.addItem(err_msg)
                 self._error_log.scrollToBottom()
 
-            position = self.stage.get_position()
+            # axis is inverted --> add a '-' sign here
+            position = -self.stage.get_position()
             self._axis_position.setText(f"{position}°")
 
             busy = self.stage.is_busy()
@@ -167,7 +168,7 @@ class StageControl(QGroupBox):
 
         self._axis_target_slider = QSlider(
             Qt.Orientation.Horizontal, self)
-        self._axis_target_slider.setRange(-180, 180)
+        self._axis_target_slider.setRange(0, 90)
         self._layout.addRow("Target", self._axis_target_slider)
 
         self._axis_move_btn = QPushButton("Move", self)
@@ -240,7 +241,8 @@ class StageControl(QGroupBox):
 
         self._logger.debug("initiating motion procedure")
         self.stage.goto_position(
-            float(self._axis_target_slider.value())
+            # axis is inverted --> add a '-' sign here
+            -float(self._axis_target_slider.value())
         )
         self._axis_move_btn.setText("Move")
         self.setDisabled(True)
