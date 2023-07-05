@@ -3,8 +3,12 @@ from typing import TYPE_CHECKING
 import logging
 import pyqtgraph as pg
 if TYPE_CHECKING:  # use the PyQt6 stubs for typechecking, as they are the nicest
-    from PyQt6.QtCore import Qt, QTimer
-    from PyQt6.QtWidgets import *
+    try:
+        from PyQt6.QtCore import Qt, QTimer
+        from PyQt6.QtWidgets import *
+    except ImportError:
+        from PyQt5.QtCore import Qt, QTimer
+        from PyQt5.QtWidgets import *
 else:
     from pyqtgraph.Qt.QtCore import Qt, QTimer
     from pyqtgraph.Qt.QtWidgets import *

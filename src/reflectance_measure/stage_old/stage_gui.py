@@ -13,7 +13,7 @@ else:
     from pyqtgraph.Qt.QtCore import Qt, QTimer
     from pyqtgraph.Qt.QtWidgets import *
 
-from reflectance_measure.stage.stage_utils import Stage
+from reflectance_measure.stage_old.stage_utils import Stage, Units
 
 
 class StageSelector(QGroupBox):
@@ -29,6 +29,11 @@ class StageSelector(QGroupBox):
         self._connection_selector = QComboBox(self)
         self._connection_selector.activated.connect(self._open_connection)
         self._layout.addRow("Port :", self._connection_selector)
+
+        self._device_selector = QComboBox(self)
+        self._device_selector.setEnabled(False)
+        self._device_selector.activated.connect(self._open_device)
+        self._layout.addRow("Device :", self._device_selector)
 
         self._axis_selector = QComboBox(self)
         self._axis_selector.setEnabled(False)
@@ -48,8 +53,8 @@ class StageSelector(QGroupBox):
         self._logger.debug("updating COM ports")
         self._connection_selector.clear()
         ports = self.stage.list_available_ports()
-        self._connection_selector.addItem("rescan")
         self._connection_selector.addItems(ports)
+        self._connection_selector.addItem("rescan")
 
     def _open_connection(self, *args):
         '''open a new connection'''
@@ -61,6 +66,27 @@ class StageSelector(QGroupBox):
         else:
             self._logger.info(f"opening connection to {port}")
             self.stage.open_connection(port)
+            self._device_selector.setEnabled(True)
+            self._update_device_list()
+
+    def _update_device_list(self):
+        '''update the device drop-down selector'''
+        self._logger.debug("updating device list")
+        self._device_selector.clear()
+        device_list = self.stage.list_available_devices()
+        self._device_selector.addItems(device_list)
+        self._device_selector.addItem("rescan")
+
+    def _open_device(self, *args):
+        '''open a device an the current connection'''
+        device = self._device_selector.currentText()
+
+        if device.casefold() == "rescan":
+            self._update_device_list()
+        else:
+            self._logger.info(f"setting device to {device}")
+            device_address = int(device.split(':')[-1].strip())
+            self.stage.set_device(device_address)
             self._axis_selector.setEnabled(True)
             self._update_axis_list()
 
@@ -69,8 +95,8 @@ class StageSelector(QGroupBox):
         self._logger.debug("updating axes list")
         self._axis_selector.clear()
         axis_list = self.stage.list_available_axes()
-        self._axis_selector.addItem("rescan")
         self._axis_selector.addItems(axis_list)
+        self._axis_selector.addItem("rescan")
 
     def _open_axis(self, *args):
         '''open a device an the current connection'''
@@ -94,11 +120,8 @@ class StageMonitor(QGroupBox):
 
         self._layout = QFormLayout(self)
 
-        self._error_log = QListWidget(self)
-        self._error_log.setMaximumHeight(
-            3*QListWidgetItem().sizeHint().height())
-        self._error_log.setResizeMode(QListWidget.ResizeMode.Adjust)
-        self._layout.addRow(self._error_log)
+        self._axis_homed = QLabel(" - ", self)
+        self._layout.addRow("Homed", self._axis_homed)
 
         self._axis_busy = QLabel(" - ", self)
         self._layout.addRow("State", self._axis_busy)
@@ -113,7 +136,6 @@ class StageMonitor(QGroupBox):
         self._refresh_timer = QTimer(self)
         self._refresh_timer.setInterval(500)
         self._refresh_timer.timeout.connect(self._update_axis_info)
-        self._refresh_timer.start()
 
     def close(self) -> bool:
         self._refresh_timer.stop()
@@ -126,22 +148,20 @@ class StageMonitor(QGroupBox):
 
     def _update_axis_info(self, *args):
         '''update the information pertaining to the given axis'''
-        # self._logger.debug("updating axis info")
+        self._logger.debug("updating axis info")
 
         axis_present = self.stage.axis is not None
 
         self.setEnabled(axis_present)
 
         if axis_present:
-            err_code, err_msg = self.stage.error_status()
-            if err_code != 0:
-                self._error_log.addItem(err_msg)
-                self._error_log.scrollToBottom()
-
-            position = self.stage.get_position()
+            position = self.stage.axis.get_position(Units.ANGLE_DEGREES)
             self._axis_position.setText(f"{position}°")
 
-            busy = self.stage.is_busy()
+            self._axis_homed.setText(
+                "homed" if self.stage.axis.is_homed() else "not homed")
+
+            busy = self.stage.axis.is_busy()
             self._axis_busy.setText('busy' if busy else 'idle')
 
 
@@ -154,12 +174,6 @@ class StageControl(QGroupBox):
         self._stage = stage or Stage()
 
         self._layout = QFormLayout(self)
-
-        self._axis_enable_btn = QPushButton("Enable", self)
-        self._axis_enable_btn.clicked.connect(self._enable_stage)
-        self._layout.addRow("Enable", self._axis_enable_btn)
-        self._axis_enable_btn.setCheckable(True)
-        self._axis_enable_btn.setChecked(False)
 
         self._axis_home_btn = QPushButton("Home", self)
         self._axis_home_btn.pressed.connect(self._home)
@@ -174,10 +188,6 @@ class StageControl(QGroupBox):
         self._axis_move_btn.pressed.connect(self._move)
         self._layout.addRow("Move", self._axis_move_btn)
 
-        self._axis_stop_btn = QPushButton("STOP", self)
-        self._axis_stop_btn.pressed.connect(self._stop)
-        self._layout.addRow("", self._axis_stop_btn)
-
         self._axis_target_slider.valueChanged.connect(
             lambda v: self._axis_move_btn.setText(f"Move to {v}°"))
 
@@ -188,7 +198,7 @@ class StageControl(QGroupBox):
         self._refresh_timer = QTimer(self)
         self._refresh_timer.setInterval(500)
         self._refresh_timer.timeout.connect(self._update_axis_info)
-        self._refresh_timer.start()
+        # self._refresh_timer.start()
 
         # error messages
         self._err_handler = QErrorMessage(self)
@@ -204,14 +214,14 @@ class StageControl(QGroupBox):
 
     def _update_axis_info(self, *args):
         '''update the information pertaining to the given axis'''
-        # self._logger.debug("updating axis info")
+        self._logger.debug("updating axis info")
 
         axis_present = self.stage.axis is not None
 
         self.setEnabled(axis_present)
 
         if axis_present:
-            busy = self.stage.is_busy()
+            busy = self.stage.axis.is_busy()
             self._axis_home_btn.setDisabled(busy)
             self._axis_move_btn.setDisabled(busy)
 
@@ -223,7 +233,7 @@ class StageControl(QGroupBox):
             return
 
         self._logger.debug("initiating homing procedure")
-        self.stage.goto_home()
+        self.stage.axis.home(wait_until_idle=False)
         self.setDisabled(True)
 
     def _move(self, *args):
@@ -234,20 +244,10 @@ class StageControl(QGroupBox):
             return
 
         self._logger.debug("initiating motion procedure")
-        self.stage.goto_position(
-            float(self._axis_target_slider.value())
+        self.stage.axis.move_absolute(
+            float(self._axis_target_slider.value()),
+            Units.ANGLE_DEGREES,
+            wait_until_idle=False
         )
         self._axis_move_btn.setText("Move")
         self.setDisabled(True)
-
-    def _stop(self, *args):
-        if self.stage.axis is None:
-            ermsg = "Cannot stop. No axis set"
-            self._err_handler.showMessage(ermsg)
-            self._logger.error(ermsg)
-            return
-        self._logger.debug("stopping motion!")
-        self.stage.stop()
-
-    def _enable_stage(self, enable: bool):
-        self.stage.enable(enable)
