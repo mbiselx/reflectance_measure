@@ -177,6 +177,7 @@ class StageControl(QGroupBox):
         self._axis_stop_btn = QPushButton("STOP", self)
         self._axis_stop_btn.pressed.connect(self._stop)
         self._layout.addRow("", self._axis_stop_btn)
+        self._axis_stop_btn.setDisabled(True)
 
         self._axis_target_slider.valueChanged.connect(
             lambda v: self._axis_move_btn.setText(f"Move to {v}°"))
@@ -211,9 +212,13 @@ class StageControl(QGroupBox):
         self.setEnabled(axis_present)
 
         if axis_present:
+            self._axis_enable_btn.setChecked(self.stage.enabled())
+
             busy = self.stage.is_busy()
+            self._axis_enable_btn.setDisabled(busy)
             self._axis_home_btn.setDisabled(busy)
             self._axis_move_btn.setDisabled(busy)
+            self._axis_stop_btn.setDisabled(not busy)
 
     def _home(self, *args):
         if self.stage.axis is None:

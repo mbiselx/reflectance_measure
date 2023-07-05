@@ -135,8 +135,9 @@ class Stage:
 
     def is_busy(self) -> bool:
         self._connection_check()
-        self.connection.command(f"{self._axis}VA?")
-        return not bool(float(self.connection.response()))
+        self.connection.command(f"TS")
+        resp = int.from_bytes(self.connection.response())
+        return bool((resp >> (self._axis - 1)) & 1)
 
     def get_position(self) -> float:
         self._connection_check()
@@ -146,6 +147,11 @@ class Stage:
     def goto_position(self, pos: float):
         self._connection_check()
         self.connection.command(f"{self._axis}PA{pos:.4f}")
+
+    def get_velocity(self) -> float:
+        self._connection_check()
+        self.connection.command(f"{self._axis}VA?")
+        return float(self.connection.response())
 
     def stop(self):
         self._connection_check()
