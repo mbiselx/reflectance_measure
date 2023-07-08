@@ -1,3 +1,4 @@
+import csv
 import math
 import logging
 from typing import TYPE_CHECKING
@@ -43,6 +44,7 @@ class MyMainWindow(QMainWindow):
 
         self._stage = Stage()
         self._daq = DAQ()
+        self._points: list[tuple(float, float)] = list()
 
         # scatterplot as central widget
         self._plot = pg.PlotWidget(self)
@@ -58,7 +60,7 @@ class MyMainWindow(QMainWindow):
             circle.setPen(pg.mkPen(0.2))
             self._plot.addItem(circle)
 
-        self._motor_angle_line = pg.InfiniteLine()
+        self._motor_angle_line = pg.InfiniteLine(angle=0)
         self._plot.addItem(self._motor_angle_line)
 
         self._scatter = pg.ScatterPlotItem()
@@ -66,7 +68,7 @@ class MyMainWindow(QMainWindow):
 
         self.setCentralWidget(self._plot)
 
-        #
+        # add actions & keyboard shortcuts
         self.tb = self.addToolBar("action")
 
         self._measure_action = QAction("measure", self)
@@ -78,6 +80,11 @@ class MyMainWindow(QMainWindow):
         self._clear_action.setShortcut(QKeySequence('Ctrl+R'))
         self._clear_action.triggered.connect(self._scatter.clear)
         self.tb.addAction(self._clear_action)
+
+        self._save_action = QAction("save", self)
+        self._save_action.setShortcut(QKeySequence('Ctrl+S'))
+        self._save_action.triggered.connect(self.save_to_file)
+        self.tb.addAction(self._save_action)
 
         # add stage control widgets on the left
         self._stage_info = StageMonitor(self, self._stage)
@@ -129,11 +136,32 @@ class MyMainWindow(QMainWindow):
             a = -self._stage.get_position()
             self._motor_angle_line.setAngle(a)
 
+    def save_to_file(self, *args):
+        filename, _ = QFileDialog.getSaveFileName(
+            self,
+            filter="CSV(*.csv)"
+        )
+
+        if filename in (None, ""):
+            return
+
+        if not filename.lower().endswith(".csv"):
+            filename += ".csv"
+
+        with open(filename, 'w') as file:
+            writer = csv.writer(file)
+            writer.writerow(["angle [deg]", "intensity [V]"])
+            writer.writerows(self._points)
+
     def measure_single_point(self, *args):
         print("measure")
-        v = self._daq.read_channel() + 10
-        a = -self._stage.get_position()/180*math.pi  # angle is inverted
+        v = self._daq.read_channel()
+        a = -self._stage.get_position()  # angle is inverted
 
+        self._points.append((a, v))
+
+        v += 10
+        a *= (math.pi/180)
         self._scatter.addPoints([math.cos(a)*v], [math.sin(a)*v])
 
     def closeEvent(self, *args):
