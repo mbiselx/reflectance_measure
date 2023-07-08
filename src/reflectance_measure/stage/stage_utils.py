@@ -1,8 +1,25 @@
+import time
 import typing
 import logging
 
 from serial import Serial
 from serial.tools.list_ports import comports
+
+
+class TimeStampedDict(dict):
+    '''
+    log the timestamp of when a dict item was set.
+    if the item was never set, return a `(None, 0)`
+    '''
+
+    def __setitem__(self, __key: typing.Any, __value: typing.Any) -> None:
+        return super().__setitem__(__key, (__value, time.time()))
+
+    def __getitem__(self, __key: typing.Any) -> typing.Any:
+        try:
+            return super().__getitem__(__key)
+        except KeyError:
+            return (None, 0)
 
 
 class ESP301_Connection(Serial):
@@ -25,10 +42,16 @@ class ESP301_Connection(Serial):
 
 
 class Stage:
-    def __init__(self, port: str | None = None, axis_number: int | None = None) -> None:
+    def __init__(self, port: str | None = None, axis_number: int | None = None, cache_timeout=0.1) -> None:
         self._logger = logging.getLogger(self.__class__.__name__)
         self._connection: ESP301_Connection | None = None
         self._axis: int | None = None
+
+        self._cache: TimeStampedDict[str, float] = TimeStampedDict()
+        '''cache responses from the stage, to avoid polling it too often'''
+
+        self._cache_timeout = cache_timeout
+        '''after this much time, the contents of the cache should be disregarded'''
 
         if port is not None:
             self.open_connection(port)
@@ -111,54 +134,111 @@ class Stage:
     def __exit__(self, *args):
         self.close()
 
-    def _connection_check(self):
-        if not self.connection:
-            raise RuntimeError("No connection set")
-        if not self.axis:
-            raise RuntimeError("No axis set")
+    @typing.overload
+    @staticmethod
+    def connection_check(func) -> typing.Callable:
+        ...
 
+    @typing.overload
+    def connection_check(self) -> None:
+        ...
+
+    def connection_check(self) -> typing.Callable | None:
+        '''
+        Can be used as a decorator or an instance method.
+
+        Raises RuntimeError if the connection is not set up correctly.
+        '''
+
+        if not callable(self):  # being used as instance method
+            if not self.connection:
+                raise RuntimeError("No connection set")
+            if not self.axis:
+                raise RuntimeError("No axis set")
+        else:  # being used as decorator
+            func = self
+
+            def _func(self, *args, **kwargs):
+                if not self.connection:
+                    raise RuntimeError("No connection set")
+                if not self.axis:
+                    raise RuntimeError("No axis set")
+                return func(self, *args, **kwargs)
+            return _func
+
+    def _cached_command(self, cmd: str) -> bytes | None:
+        '''
+        send a command and place the response in a chache.
+        the next time this command is sent, the the cache is checked 
+        for an existing recent response, and this is returned instead, 
+        if it is within the response timeout period. 
+        '''
+        cached_resp, timestamp = self._cache[cmd]
+        if time.time() - timestamp >= self._cache_timeout:
+            self.connection.command(cmd)
+            resp = self.connection.response()
+            self._cache[cmd] = resp
+            return resp
+        else:
+            return cached_resp
+
+    @connection_check
     def enable(self, enable: bool = True):
-        self._connection_check()
         self.connection.command(f"{self._axis}M{'O' if enable else 'F'}")
+
+        # we need to invalidate the cached response to the "enabled" query
+        del self._cache[f"{self._axis}MO?"]
 
     def disable(self, disable: bool = True):
         self.enable(not disable)
 
+    @connection_check
     def enabled(self) -> bool:
-        self._connection_check()
-        self.connection.command(f"{self._axis}MO?")
-        return bool(int(self.connection.response()))
+        cmd = f"{self._axis}MO?"
+        rsp = self._cached_command(cmd)
+        return bool.from_bytes(rsp)
 
+    @connection_check
     def goto_home(self):
-        self._connection_check()
         self.connection.command(f"{self._axis}OR")
+        # we need to invalidate the cached response to the "is busy" query
+        del self._cache['TS']
 
+    @connection_check
     def is_busy(self) -> bool:
-        self._connection_check()
-        self.connection.command(f"TS")
-        resp = int.from_bytes(self.connection.response())
-        return bool((resp >> (self._axis - 1)) & 1)
+        cmd = f"TS"
+        rsp = self._cached_command(cmd)
+        return bool((int.from_bytes(rsp) >> (self.axis - 1)) & 1)
 
+    @connection_check
     def get_position(self) -> float:
-        self._connection_check()
-        self.connection.command(f"{self._axis}PA?")
-        return float(self.connection.response())
+        cmd = f"{self._axis}PA?"
+        rsp = self._cached_command(cmd)
+        return float(rsp)
 
+    @connection_check
     def goto_position(self, pos: float):
-        self._connection_check()
-        self.connection.command(f"{self._axis}PA{pos:.4f}")
+        cmd = f"{self._axis}PA{pos:.4f}"
+        self.connection.command(cmd)
 
+        # we need to invalidate the cached response to the "is busy" query
+        del self._cache[f"TS"]
+
+    @connection_check
     def get_velocity(self) -> float:
-        self._connection_check()
-        self.connection.command(f"{self._axis}VA?")
-        return float(self.connection.response())
+        cmd = f"{self._axis}VA?"
+        rsp = self._cached_command(cmd)
+        return float(rsp)
 
+    @connection_check
     def stop(self):
-        self._connection_check()
         self.connection.command(f"{self._axis}ST")
 
+        # we need to invalidate the cached response to the "is busy" query
+        del self._cache[f"TS"]
+
+    @connection_check
     def error_status(self) -> tuple[int, str]:
-        self._connection_check()
         self.connection.command(f"TB")
         err_code, _, err_msg = self.connection.response().split(b", ")
         return int(err_code), err_msg.decode("ascii")
