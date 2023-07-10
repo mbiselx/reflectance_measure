@@ -113,9 +113,8 @@ class ExperimentAutomation(QObject):
         for angle in angles:
             self._logger.debug(f"{angle=}°deg")
             self._stage.goto_position(-angle)
-            time.sleep(min(1, self.increment_angle*5))
-
-            # self._stage.wait_until_done() #this is broken...
+            self._stage.wait_until_done()
+            # time.sleep(min(1, self.increment_angle*5))
 
             for i in range(self.nb_measurements):
                 self._logger.debug(f"measurement {i}")
