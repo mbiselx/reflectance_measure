@@ -30,14 +30,29 @@ class ESP301_Connection(Serial):
                          parity="N",
                          stopbits=1,
                          timeout=timeout,
+                         write_timeout=timeout,
                          rtscts=True
                          )
+        self._locked: bool = False
 
     def command(self, command: str):
+        while (self._locked):
+            time.sleep(self.timeout)
+        self._locked = True
         self.write(f"{command}\r\n".encode("ascii"))
+        self._locked = False
 
     def response(self) -> bytes:
         response = self.readline().removesuffix(b'\r\n')
+        return response
+
+    def command_with_response(self, command: str) -> bytes:
+        while (self._locked):
+            time.sleep(self.timeout)
+        self._locked = True
+        self.write(f"{command}\r\n".encode("ascii"))
+        response = self.readline().removesuffix(b'\r\n')
+        self._locked = False
         return response
 
 
@@ -136,14 +151,14 @@ class Stage:
 
     @typing.overload
     @staticmethod
-    def connection_check(func) -> typing.Callable:
+    def connection_check(func: typing.Callable) -> typing.Callable:
         ...
 
     @typing.overload
     def connection_check(self) -> None:
         ...
 
-    def connection_check(self) -> typing.Callable | None:
+    def connection_check(self: 'Stage | typing.Callable'):
         '''
         Can be used as a decorator or an instance method.
 
@@ -175,8 +190,7 @@ class Stage:
         '''
         cached_resp, timestamp = self._cache[cmd]
         if time.time() - timestamp >= self._cache_timeout:
-            self.connection.command(cmd)
-            resp = self.connection.response()
+            resp = self.connection.command_with_response(cmd)
             self._cache[cmd] = resp
             return resp
         else:
@@ -196,7 +210,7 @@ class Stage:
     def enabled(self) -> bool:
         cmd = f"{self._axis}MO?"
         rsp = self._cached_command(cmd)
-        return bool.from_bytes(rsp)
+        return rsp == b'1'
 
     @connection_check
     def goto_home(self):
@@ -218,6 +232,7 @@ class Stage:
 
     @connection_check
     def goto_position(self, pos: float):
+        '''Go to a given position. non-blocking '''
         cmd = f"{self._axis}PA{pos:.4f}"
         self.connection.command(cmd)
 
@@ -237,10 +252,24 @@ class Stage:
         # we need to invalidate the cached response to the "is busy" query
         del self._cache[f"TS"]
 
+    def wait_until_done(self):
+        '''wait until the stage is no longer busy'''
+        # wait while busy
+        self._logger.debug("waiting until taks is done")
+        while self.is_busy():
+            time.sleep(self._cache_timeout)
+            self._logger.debug("waiting...")
+        self._logger.debug("done!")
+        # check to make sure there was no error
+        ec, msg = self.error_status()
+        if ec != 0:
+            raise RuntimeError(f"MOTOR ERROR {ec} : {msg}")
+
     @connection_check
     def error_status(self) -> tuple[int, str]:
-        self.connection.command(f"TB")
-        err_code, _, err_msg = self.connection.response().split(b", ")
+        '''check the current error status'''
+        rsp = self.connection.command_with_response("TB")
+        err_code, _, err_msg = rsp.split(b", ")
         return int(err_code), err_msg.decode("ascii")
 
     def interactive_setup(self):
