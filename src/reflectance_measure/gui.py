@@ -7,19 +7,20 @@ import pyqtgraph as pg
 if TYPE_CHECKING:  # use the PyQt6 stubs for typechecking, as they are the most complete
     try:
         from PyQt6.QtCore import Qt, QTimer, QRectF
-        from PyQt6.QtGui import QKeySequence
+        from PyQt6.QtGui import *
         from PyQt6.QtWidgets import *
     except ImportError:
         from PyQt5.QtCore import Qt, QTimer, QRectF
-        from PyQt5.QtGui import QKeySequence
+        from PyQt5.QtGui import *
         from PyQt5.QtWidgets import *
 else:
     from pyqtgraph.Qt.QtCore import Qt, QTimer, QRectF
-    from pyqtgraph.Qt.QtGui import QKeySequence
+    from pyqtgraph.Qt.QtGui import *
     from pyqtgraph.Qt.QtWidgets import *
 
 from reflectance_measure.stage.stage_gui import Stage, StageSelector, StageMonitor, StageControl
 from reflectance_measure.daq.daq_gui import DAQ, DAQSelector, DAQMonitor
+from reflectance_measure.automation import ExperimentAutomationWidget
 
 
 class DynamicLayoutDockWidget(QDockWidget):
@@ -48,13 +49,15 @@ class MyMainWindow(QMainWindow):
 
         # scatterplot as central widget
         self._plot = pg.PlotWidget(self)
-        r = QRectF(0, 0, 20, 20)
+        r = QRectF(0, 0, 10, 10)
         self._plot.setRange(r)
+        self._plot.setAspectLocked(True)
+        self._plot.setMinimumWidth(300)
 
         # polar grid lines
         self._plot.addLine(x=0, pen=0.2)
         self._plot.addLine(y=0, pen=0.2)
-        for r in range(2, 20, 2):
+        for r in range(1, 10, 1):
             circle = pg.CircleROI((-r, -r), radius=r,
                                   movable=False, handlePen=0.0)
             circle.setPen(pg.mkPen(0.2))
@@ -126,6 +129,17 @@ class MyMainWindow(QMainWindow):
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea,
                            self._daq_selector_dock)
 
+        # add automation widget on the bottom
+        self._automation_widget = ExperimentAutomationWidget(
+            self, stage=self._stage, daq=self._daq)
+        self._automation_widget.sig_measurement_added.connect(
+            self.add_single_point)
+        self._automation_widget_dock = DynamicLayoutDockWidget(
+            "automation", self)
+        self._automation_widget_dock.setWidget(self._automation_widget)
+        self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea,
+                           self._automation_widget_dock)
+
         self._refresh_timer = QTimer(self)
         self._refresh_timer.setInterval(250)
         self._refresh_timer.timeout.connect(self._update_angle)
@@ -157,10 +171,11 @@ class MyMainWindow(QMainWindow):
         print("measure")
         v = self._daq.read_channel()
         a = -self._stage.get_position()  # angle is inverted
+        self.add_single_point((a, v))
 
-        self._points.append((a, v))
-
-        v += 10
+    def add_single_point(self, point: tuple[float, float]):
+        self._points.append(point)
+        a, v = point
         a *= (math.pi/180)
         self._scatter.addPoints([math.cos(a)*v], [math.sin(a)*v])
 
