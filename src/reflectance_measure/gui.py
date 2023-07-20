@@ -1,6 +1,8 @@
 import csv
 import math
+import time
 import logging
+from collections import deque
 from typing import TYPE_CHECKING
 
 import pyqtgraph as pg
@@ -54,6 +56,9 @@ class MyMainWindow(QMainWindow):
         self._plot.setAspectLocked(True)
         self._plot.setMinimumWidth(300)
 
+        self._timeline_plot = pg.PlotWidget(self)
+        self._timeline = deque(maxlen=500), deque(maxlen=500)
+
         # polar grid lines
         self._plot.addLine(x=0, pen=0.2)
         self._plot.addLine(y=0, pen=0.2)
@@ -72,7 +77,12 @@ class MyMainWindow(QMainWindow):
         self._photodiode_value = pg.ScatterPlotItem(brush=pg.mkBrush('red'))
         self._plot.addItem(self._photodiode_value)
 
-        self.setCentralWidget(self._plot)
+        self._tabs = QTabWidget(self)
+        self._tabs.addTab(self._plot, "polar plot")
+        self._tabs.addTab(self._timeline_plot, "timeline")
+        self._tabs.setCurrentIndex(0)
+
+        self.setCentralWidget(self._tabs)
 
         # add actions & keyboard shortcuts
         self.tb = self.addToolBar("action")
@@ -149,14 +159,23 @@ class MyMainWindow(QMainWindow):
         self._refresh_timer.start()
 
     def _update_current_value(self, *args):
-        if not self._stage.axis:
-            return
-
-        a = -self._stage.get_position()
-        self._motor_angle_line.setAngle(a)
 
         if self._daq.channel:
             v = self._daq.read_channel()
+        else:
+            v = float('nan')
+        self._timeline[0].append(time.time())
+        self._timeline[1].append(v)
+        self._timeline_plot.plotItem.plot(
+            *self._timeline,
+            clear=True
+        )
+
+        if self._stage.axis:
+            a = -self._stage.get_position()
+            self._motor_angle_line.setAngle(a)
+
+        if self._daq.channel and self._stage.axis:
             a *= (math.pi/180)
             x, y = v*math.cos(a), v*math.sin(a)
             self._photodiode_value.setData([x], [y])
@@ -192,6 +211,7 @@ class MyMainWindow(QMainWindow):
 
     def clear(self):
         self._scatter.clear()
+        self._points = list()
         self._plot.plotItem.replot()
 
     def closeEvent(self, *args):
