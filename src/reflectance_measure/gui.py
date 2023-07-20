@@ -63,11 +63,14 @@ class MyMainWindow(QMainWindow):
             circle.setPen(pg.mkPen(0.2))
             self._plot.addItem(circle)
 
+        self._scatter = pg.ScatterPlotItem()
+        self._plot.addItem(self._scatter)
+
         self._motor_angle_line = pg.InfiniteLine(angle=0)
         self._plot.addItem(self._motor_angle_line)
 
-        self._scatter = pg.ScatterPlotItem()
-        self._plot.addItem(self._scatter)
+        self._photodiode_value = pg.ScatterPlotItem(brush=pg.mkBrush('red'))
+        self._plot.addItem(self._photodiode_value)
 
         self.setCentralWidget(self._plot)
 
@@ -81,7 +84,7 @@ class MyMainWindow(QMainWindow):
 
         self._clear_action = QAction("clear", self)
         self._clear_action.setShortcut(QKeySequence('Ctrl+R'))
-        self._clear_action.triggered.connect(self._scatter.clear)
+        self._clear_action.triggered.connect(self.clear)
         self.tb.addAction(self._clear_action)
 
         self._save_action = QAction("save", self)
@@ -141,14 +144,22 @@ class MyMainWindow(QMainWindow):
                            self._automation_widget_dock)
 
         self._refresh_timer = QTimer(self)
-        self._refresh_timer.setInterval(250)
-        self._refresh_timer.timeout.connect(self._update_angle)
+        self._refresh_timer.setInterval(100)
+        self._refresh_timer.timeout.connect(self._update_current_value)
         self._refresh_timer.start()
 
-    def _update_angle(self, *args):
-        if self._stage.axis:
-            a = -self._stage.get_position()
-            self._motor_angle_line.setAngle(a)
+    def _update_current_value(self, *args):
+        if not self._stage.axis:
+            return
+
+        a = -self._stage.get_position()
+        self._motor_angle_line.setAngle(a)
+
+        if self._daq.channel:
+            v = self._daq.read_channel()
+            a *= (math.pi/180)
+            x, y = v*math.cos(a), v*math.sin(a)
+            self._photodiode_value.setData([x], [y])
 
     def save_to_file(self, *args):
         filename, _ = QFileDialog.getSaveFileName(
@@ -178,6 +189,10 @@ class MyMainWindow(QMainWindow):
         a, v = point
         a *= (math.pi/180)
         self._scatter.addPoints([math.cos(a)*v], [math.sin(a)*v])
+
+    def clear(self):
+        self._scatter.clear()
+        self._plot.plotItem.replot()
 
     def closeEvent(self, *args):
         try:
