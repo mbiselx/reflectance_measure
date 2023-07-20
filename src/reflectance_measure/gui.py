@@ -232,6 +232,13 @@ if __name__ == "__main__":
 
     app = pg.mkQApp("reflectance measure")
 
+    try:
+        import qdarktheme
+        qdarktheme.setup_theme()
+    except ImportError:
+        logging.warn(
+            "Failed to set dark theme. please install pyqtdarktheme for dark theme enable")
+
     mw = MyMainWindow()
     mw.show()
 
