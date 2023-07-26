@@ -20,7 +20,7 @@ classifiers = [
 dependencies = [
     "pyqtgraph",
     "numpy",
-    "pyserial, 
-    "zaber-motion", 
+    "pyserial",
+    "zaber-motion",
     "nidaqmx",
 ]
