@@ -1,21 +1,24 @@
 from typing import TYPE_CHECKING
 
+import os
 import csv
 import time
 import logging
 
 import numpy as np
-import pyqtgraph as pg
-if TYPE_CHECKING:  # use the PyQt6 stubs for typechecking, as they are the nicest
-    try:
-        from PyQt6.QtCore import Qt, QObject, QThread, pyqtSignal as Signal
-        from PyQt6.QtWidgets import *
-    except ImportError:
-        from PyQt5.QtCore import Qt, QObject, QThread, pyqtSignal as Signal
-        from PyQt5.QtWidgets import *
+if TYPE_CHECKING:  # use the PyQt6 stubs for typechecking,
+    # as they are the nicest
+    from PyQt6.QtCore import QObject, QThread, pyqtSignal as Signal
+    from PyQt6.QtWidgets import (QWidget, QFrame, QBoxLayout, QGroupBox,
+                                 QFormLayout, QDoubleSpinBox, QSpinBox,
+                                 QVBoxLayout, QCheckBox, QPushButton,
+                                 QErrorMessage, QFileDialog)
 else:
-    from pyqtgraph.Qt.QtCore import Qt, QObject, QThread, Signal
-    from pyqtgraph.Qt.QtWidgets import *
+    from pyqtgraph.Qt.QtCore import QObject, QThread, Signal
+    from pyqtgraph.Qt.QtWidgets import (QWidget, QFrame, QBoxLayout, QGroupBox,
+                                        QFormLayout, QDoubleSpinBox, QSpinBox,
+                                        QVBoxLayout, QCheckBox, QPushButton,
+                                        QErrorMessage, QFileDialog)
 
 from reflectance_measure.stage.stage_utils import Stage
 from reflectance_measure.daq.daq_utils import DAQ
@@ -26,7 +29,8 @@ class ExperimentAutomation(QObject):
     sig_measurement_failed = Signal(Exception)
     sig_measurement_added = Signal(tuple)
 
-    def __init__(self, parent: QObject | None = None, stage: Stage | None = None, daq: DAQ | None = None) -> None:
+    def __init__(self, parent: QObject | None = None,
+                 stage: Stage | None = None, daq: DAQ | None = None) -> None:
         super().__init__(parent)
         self._logger = logging.getLogger(self.__class__.__name__)
 
@@ -80,7 +84,7 @@ class ExperimentAutomation(QObject):
     @catch_exception
     def do_measurement(self, homing: bool = True):
         '''
-        blocking routine to perform the measurements, and save 
+        blocking routine to perform the measurements, and save
         them in the `measurements` property.
         emits the `sig_measurement_finished` signal when it is done.
         '''
@@ -127,7 +131,7 @@ class ExperimentAutomation(QObject):
 
             if self.save_file and (time.time() - last_save_time > 1):
                 with open(self.save_file, 'w') as file:
-                    writer = csv.writer(file)
+                    writer = csv.writer(file, lineterminator=os.linesep)
                     writer.writerow(["angle [deg]", "intensity [V]"])
                     writer.writerows(self.measurements)
 
@@ -139,7 +143,8 @@ class ExperimentAutomationWidget(QFrame):
     sig_experiment_finished = Signal()
     sig_measurement_added: Signal
 
-    def __init__(self, parent: QWidget | None = None, stage: Stage | None = None, daq: DAQ | None = None):
+    def __init__(self, parent: QWidget | None = None,
+                 stage: Stage | None = None, daq: DAQ | None = None):
         super().__init__(parent)
         self._logger = logging.getLogger(self.__class__.__name__)
 
@@ -175,19 +180,22 @@ class ExperimentAutomationWidget(QFrame):
         self._angle_increment = QDoubleSpinBox(self._params_box)
         self._angle_increment.setRange(0.01, 90.)
         self._angle_increment.setValue(self._ea.increment_angle)
-        self._params_box.layout().addRow("angle increment", self._angle_increment)
+        self._params_box.layout().addRow("angle increment",
+                                         self._angle_increment)
         self._angle_increment.valueChanged.connect(
             self._ea.set_increment_angle)
 
         self._nb_measurements = QSpinBox(self._params_box)
         self._nb_measurements.setValue(self._ea.nb_measurements)
-        self._params_box.layout().addRow("nb measurements", self._nb_measurements)
+        self._params_box.layout().addRow("nb measurements",
+                                         self._nb_measurements)
         self._nb_measurements.valueChanged.connect(
             self._ea.set_nb_measurements)
 
         self._measurement_interval = QDoubleSpinBox(self._params_box)
         self._measurement_interval.setValue(self._ea.measurement_interval)
-        self._params_box.layout().addRow("measurement interval", self._measurement_interval)
+        self._params_box.layout().addRow("measurement interval",
+                                         self._measurement_interval)
         self._measurement_interval.valueChanged.connect(
             self._ea.set_measurement_interval)
 
@@ -246,7 +254,8 @@ class ExperimentAutomationWidget(QFrame):
         self._measurement_done()
 
     def _measurement_failed(self, reason: Exception):
-        ermsg = f"Failed to run experiment. {reason.__class__.__name__} : {reason}"
+        ermsg = "Failed to run experiment. " +\
+            f"{reason.__class__.__name__} : {reason}"
         self._error_handler.showMessage(ermsg)
         self._logger.error(ermsg)
 

@@ -1,3 +1,4 @@
+import os
 import csv
 import math
 import time
@@ -6,27 +7,29 @@ from collections import deque
 from typing import TYPE_CHECKING
 
 import pyqtgraph as pg
-if TYPE_CHECKING:  # use the PyQt6 stubs for typechecking, as they are the most complete
-    try:
-        from PyQt6.QtCore import Qt, QTimer, QRectF
-        from PyQt6.QtGui import *
-        from PyQt6.QtWidgets import *
-    except ImportError:
-        from PyQt5.QtCore import Qt, QTimer, QRectF
-        from PyQt5.QtGui import *
-        from PyQt5.QtWidgets import *
+if TYPE_CHECKING:  # use the PyQt6 stubs for typechecking, as they
+    # are the most complete
+    from PyQt6.QtCore import Qt, QTimer, QRectF
+    from PyQt6.QtGui import QKeySequence, QAction
+    from PyQt6.QtWidgets import (QWidget, QMainWindow, QTabWidget,
+                                 QBoxLayout, QDockWidget, QFileDialog)
 else:
     from pyqtgraph.Qt.QtCore import Qt, QTimer, QRectF
-    from pyqtgraph.Qt.QtGui import *
-    from pyqtgraph.Qt.QtWidgets import *
+    from pyqtgraph.Qt.QtGui import QKeySequence, QAction
+    from pyqtgraph.Qt.QtWidgets import (QWidget, QMainWindow, QTabWidget,
+                                        QBoxLayout, QDockWidget, QFileDialog)
 
-from reflectance_measure.stage.stage_gui import Stage, StageSelector, StageMonitor, StageControl
+from reflectance_measure.stage.stage_gui import (Stage, StageSelector,
+                                                 StageMonitor, StageControl)
 from reflectance_measure.daq.daq_gui import DAQ, DAQSelector, DAQMonitor
 from reflectance_measure.automation import ExperimentAutomationWidget
 
 
 class DynamicLayoutDockWidget(QDockWidget):
-    '''dockwidget which dynamically adapts its layout depending on the dock it is placed in'''
+    '''
+    dockwidget which dynamically adapts its layout depending
+    on the dock it is placed in
+    '''
 
     def update_layout(self, dock_area: Qt.DockWidgetArea):
         widget = self.widget()
@@ -35,9 +38,11 @@ class DynamicLayoutDockWidget(QDockWidget):
         if not isinstance(layout, QBoxLayout):
             return
 
-        if dock_area & (Qt.DockWidgetArea.LeftDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea):
+        if dock_area & (Qt.DockWidgetArea.LeftDockWidgetArea |
+                        Qt.DockWidgetArea.RightDockWidgetArea):
             layout.setDirection(QBoxLayout.Direction.TopToBottom)
-        elif dock_area & (Qt.DockWidgetArea.TopDockWidgetArea | Qt.DockWidgetArea.BottomDockWidgetArea):
+        elif dock_area & (Qt.DockWidgetArea.TopDockWidgetArea |
+                          Qt.DockWidgetArea.BottomDockWidgetArea):
             layout.setDirection(QBoxLayout.Direction.LeftToRight)
 
 
@@ -71,6 +76,9 @@ class MyMainWindow(QMainWindow):
         self._scatter = pg.ScatterPlotItem()
         self._plot.addItem(self._scatter)
 
+        self._avg = pg.PlotCurveItem(pen=pg.mkPen('red'))
+        self._plot.addItem(self._avg)
+
         self._motor_angle_line = pg.InfiniteLine(angle=0)
         self._plot.addItem(self._motor_angle_line)
 
@@ -86,6 +94,11 @@ class MyMainWindow(QMainWindow):
 
         # add actions & keyboard shortcuts
         self.tb = self.addToolBar("action")
+
+        self._avg_action = QAction("avg", self)
+        self._avg_action.setCheckable(True)
+        self._avg_action.triggered.connect(self.calculate_averages)
+        self.tb.addAction(self._avg_action)
 
         self._measure_action = QAction("measure", self)
         self._measure_action.setShortcut(QKeySequence('Ctrl+M'))
@@ -193,7 +206,8 @@ class MyMainWindow(QMainWindow):
             filename += ".csv"
 
         with open(filename, 'w') as file:
-            writer = csv.writer(file)
+
+            writer = csv.writer(file, lineterminator=os.linesep)
             writer.writerow(["angle [deg]", "intensity [V]"])
             writer.writerows(self._points)
 
@@ -208,9 +222,29 @@ class MyMainWindow(QMainWindow):
         a, v = point
         a *= (math.pi/180)
         self._scatter.addPoints([math.cos(a)*v], [math.sin(a)*v])
+        if self._avg_action.isChecked():
+            self.calculate_averages()
+
+    def calculate_averages(self, enabled=True):
+        if not enabled:
+            self._avg.clear()
+            self._plot.plotItem.replot()
+            return
+
+        avg_x, avg_y = [], []
+        unique_a = list(set(tuple(zip(*self._points))[0]))
+        for a_a in unique_a:
+            v_a = [v for a, v in self._points if a == a_a]
+            avg_v = sum(v_a)/len(v_a)
+            a_a *= (math.pi/180)
+            avg_x.append(math.cos(a_a)*avg_v)
+            avg_y.append(math.sin(a_a)*avg_v)
+
+        self._avg.setData(avg_x, avg_y)
 
     def clear(self):
         self._scatter.clear()
+        self._avg.clear()
         self._points = list()
         self._plot.plotItem.replot()
 
@@ -237,7 +271,9 @@ if __name__ == "__main__":
         qdarktheme.setup_theme()
     except ImportError:
         logging.warn(
-            "Failed to set dark theme. please install pyqtdarktheme for dark theme enable")
+            "Failed to set dark theme. "
+            "Please install pyqtdarktheme for dark theme enable"
+        )
 
     mw = MyMainWindow()
     mw.show()
