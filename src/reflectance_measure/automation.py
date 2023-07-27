@@ -244,6 +244,7 @@ class ExperimentAutomationWidget(QFrame):
         self._start_button.setEnabled(True)
         self._cancel_button.setDisabled(True)
         self._save_file_checkbox.setEnabled(True)
+        self._save_file_checkbox.setChecked(False)
 
         if self._play_sound_checkbox.isChecked():
             winsound.Beep(1320, 500)
