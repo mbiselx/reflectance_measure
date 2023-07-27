@@ -1,10 +1,10 @@
 from typing import TYPE_CHECKING
 
-import os
 import csv
 import time
 import logging
 
+import winsound
 import numpy as np
 if TYPE_CHECKING:  # use the PyQt6 stubs for typechecking,
     # as they are the nicest
@@ -131,7 +131,7 @@ class ExperimentAutomation(QObject):
 
             if self.save_file and (time.time() - last_save_time > 1):
                 with open(self.save_file, 'w') as file:
-                    writer = csv.writer(file, lineterminator=os.linesep)
+                    writer = csv.writer(file, lineterminator='\n')
                     writer.writerow(["angle [deg]", "intensity [V]"])
                     writer.writerows(self.measurements)
 
@@ -210,6 +210,11 @@ class ExperimentAutomationWidget(QFrame):
         self._save_file_checkbox.setChecked(self._ea.save_file is not None)
         self._save_file_checkbox.toggled.connect(self._set_save_file)
 
+        self._play_sound_checkbox = QCheckBox(
+            "play sound when done", self._startbutton_box)
+        self._startbutton_box.layout().addWidget(self._play_sound_checkbox)
+        self._play_sound_checkbox.setChecked(True)
+
         self._start_button = QPushButton("start", self._startbutton_box)
         self._startbutton_box.layout().addWidget(self._start_button)
         self._start_button.pressed.connect(self._measurement_started)
@@ -239,6 +244,10 @@ class ExperimentAutomationWidget(QFrame):
         self._start_button.setEnabled(True)
         self._cancel_button.setDisabled(True)
         self._save_file_checkbox.setEnabled(True)
+
+        if self._play_sound_checkbox.isChecked():
+            winsound.Beep(1320, 500)
+
         self.sig_experiment_finished.emit()
 
     def _cancel_measurement(self):

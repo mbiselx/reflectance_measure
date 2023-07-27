@@ -23,4 +23,5 @@ dependencies = [
     "pyserial",
     "zaber-motion",
     "nidaqmx",
+    "winsound",
 ]

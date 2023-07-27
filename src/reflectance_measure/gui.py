@@ -1,4 +1,3 @@
-import os
 import csv
 import math
 import time
@@ -207,7 +206,7 @@ class MyMainWindow(QMainWindow):
 
         with open(filename, 'w') as file:
 
-            writer = csv.writer(file, lineterminator=os.linesep)
+            writer = csv.writer(file, lineterminator='\n')
             writer.writerow(["angle [deg]", "intensity [V]"])
             writer.writerows(self._points)
 
@@ -232,7 +231,7 @@ class MyMainWindow(QMainWindow):
             return
 
         avg_x, avg_y = [], []
-        unique_a = list(set(tuple(zip(*self._points))[0]))
+        unique_a = sorted(set(tuple(zip(*self._points))[0]))
         for a_a in unique_a:
             v_a = [v for a, v in self._points if a == a_a]
             avg_v = sum(v_a)/len(v_a)
