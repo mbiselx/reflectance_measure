@@ -269,10 +269,13 @@ if __name__ == "__main__":
         import qdarktheme
         qdarktheme.setup_theme()
     except ImportError:
-        logging.warn(
+        logging.warning(
             "Failed to set dark theme. "
-            "Please install pyqtdarktheme for dark theme enable"
+            "Please install pyqtdarktheme for dark theme enable ( pip install pyqtdarktheme )"
         )
+    except Exception as e:
+        logging.error(
+            "Failed to set dark theme for the following reason : \n" + str(e))
 
     mw = MyMainWindow()
     mw.show()
