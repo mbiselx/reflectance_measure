@@ -4,7 +4,11 @@ import csv
 import time
 import logging
 
-import winsound
+try:
+    import winsound
+except ImportError:
+    winsound = None
+
 import numpy as np
 if TYPE_CHECKING:  # use the PyQt6 stubs for typechecking,
     # as they are the nicest
@@ -214,6 +218,7 @@ class ExperimentAutomationWidget(QFrame):
             "play sound when done", self._startbutton_box)
         self._startbutton_box.layout().addWidget(self._play_sound_checkbox)
         self._play_sound_checkbox.setChecked(True)
+        self._play_sound_checkbox.setVisible(winsound is not None)
 
         self._start_button = QPushButton("start", self._startbutton_box)
         self._startbutton_box.layout().addWidget(self._start_button)
